@@ -1,62 +1,52 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-
-using NATUPNPLib;
+using System.Net.Sockets;
+using System.Threading;
 
 namespace ScreenBuddies {
     /// <summary>
-    /// Interaction logic for MainWindow.xaml
+    ///     Interaction logic for MainWindow.xaml
     /// </summary>
     public partial class MainWindow : Window {
+        private UdpSocket _socket;
 
         public MainWindow() {
             InitializeComponent();
-        }
 
-        public static string GetLocalIPAddress() {
-            IPHostEntry host = Dns.GetHostEntry(Dns.GetHostName());
-            foreach (IPAddress ip in host.AddressList) {
-                if (ip.AddressFamily == AddressFamily.InterNetwork) {
-                    return ip.ToString();
+            AddPortToMapping(GetLocalIPAddress(), 20000, NetworkProtocol.UDP, "Screen Buddies");
+
+            _socket = new UdpSocket(null, 20000);
+            Thread t = new Thread(() => {
+                string message = "";
+                while (message != "$quit") {
+                    message = _socket.Receive();
+                    AddLine(message);
                 }
-            }
-            throw new Exception("Local IP Address Not Found!");
+            });
+            t.Start();
+
+            AddLine("Waiting for incoming connections.");
         }
 
-        private void AddLine(string text) {
-            tbx.Text += text + "\n";
+        private void btnStartClient_Click(object sender, RoutedEventArgs e) {
+            IPAddress IP;
+            if ( !IPAddress.TryParse( tbxIP.Text, out IP ) ) {
+                AddLine( "\"" + tbxIP.Text + "\" was not recognised as a valid IP Address." );
+                return;
+            }
+
+            _socket.Connect();
         }
 
-        private void btnBrowse_Click(object sender, RoutedEventArgs e) {
-            tbx.Text = "";
+        private async void tbxSend_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) {
+            if (e.Key != System.Windows.Input.Key.Enter)
+                return;
 
-            UPnPNATClass upnpnat = new UPnPNATClass();
-            IStaticPortMappingCollection mappings = upnpnat.StaticPortMappingCollection;
-            try { mappings.Remove(20000, "UDP"); } catch (Exception) { /* ignored */ }
-            mappings.Add(20000, "UDP", 20000, GetLocalIPAddress(), true, "Screen Buddies");
-            foreach (IStaticPortMapping portMapping in mappings) {
-                if (portMapping.InternalClient != GetLocalIPAddress())
-                    continue;
+            string data = tbxSend.Text;
+            tbxSend.Text = "";
 
-                AddLine(portMapping.Description);
-                AddLine(portMapping.ExternalIPAddress + ":" + portMapping.ExternalPort + " @ " +
-                        portMapping.Protocol);
-                AddLine(portMapping.Enabled + "\n");
-            }
+            await _socket.Send(data);
         }
     }
 }
