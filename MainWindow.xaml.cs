@@ -4,49 +4,71 @@ using System.Windows;
 using System.Net.Sockets;
 using System.Threading;
 
+using Networking;
+
 namespace ScreenBuddies {
     /// <summary>
-    ///     Interaction logic for MainWindow.xaml
+    /// Interaction logic for MainWindow.xaml
     /// </summary>
     public partial class MainWindow : Window {
-        private UdpSocket _socket;
+
+        private TcpSocket _socket;
 
         public MainWindow() {
             InitializeComponent();
 
-            AddPortToMapping(GetLocalIPAddress(), 20000, NetworkProtocol.UDP, "Screen Buddies");
+            FConsole.Buffer = tbxConsole;
 
-            _socket = new UdpSocket(null, 20000);
-            Thread t = new Thread(() => {
-                string message = "";
-                while (message != "$quit") {
-                    message = _socket.Receive();
-                    AddLine(message);
+            _socket = new TcpSocket();
+            _socket.ConnectionSuccessful += InitSocket;
+            _socket.ConnectionLost += DestroySocket;
+            _socket.DataReceived += DataReceived;
+            _socket.DataSent += DataSent;
+        }
+
+        public void InitSocket( TcpSocket newConnection ) {
+            FConsole.WriteLine( "Connected successfully! " + newConnection.RemoteEndPoint );
+
+            _socket.Receive();
+        }
+
+        public void DestroySocket( TcpSocket socket ) {
+            FConsole.WriteLine( "Lost connection to the server. " + socket.RemoteEndPoint );
+            socket.Close();
+        }
+
+        public void DataReceived( TcpSocket socket, byte[] data ) {
+            FConsole.WriteLine( "Received: " + TcpSocket.ByteArrayToObject<string>( data ) );
+        }
+
+        public void DataSent( TcpSocket socket, byte[] data ) {
+            FConsole.WriteLine( "Sent: " + TcpSocket.ByteArrayToObject<string>( data ) );
+
+            tbxSend.Dispatcher.Invoke(
+                () => {
+                    tbxSend.Text = "";
                 }
-            });
+            );
+        }
+
+        private void btnStartClient_Click( object sender, RoutedEventArgs e ) {
+            Thread t = new Thread(
+                () => {
+                    _socket.Connect( "127.0.0.1", 20000 );
+                    
+                    while ( _socket.Connected ) {
+                        _socket.Receive();
+                    }
+                }
+            );
             t.Start();
-
-            AddLine("Waiting for incoming connections.");
         }
 
-        private void btnStartClient_Click(object sender, RoutedEventArgs e) {
-            IPAddress IP;
-            if ( !IPAddress.TryParse( tbxIP.Text, out IP ) ) {
-                AddLine( "\"" + tbxIP.Text + "\" was not recognised as a valid IP Address." );
-                return;
-            }
-
-            _socket.Connect();
-        }
-
-        private async void tbxSend_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) {
-            if (e.Key != System.Windows.Input.Key.Enter)
+        private void tbxSend_KeyDown( object sender, System.Windows.Input.KeyEventArgs e ) {
+            if ( e.Key != System.Windows.Input.Key.Enter )
                 return;
 
-            string data = tbxSend.Text;
-            tbxSend.Text = "";
-
-            await _socket.Send(data);
+            _socket.Send( tbxSend.Text );
         }
     }
 }

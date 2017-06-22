@@ -5,17 +5,21 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ScreenBuddies"
         mc:Ignorable="d"
-        Title="MainWindow" Height="375.116" Width="546.767">
+        Title="MainWindow" Height="376.449" Width="544.767">
     <Grid Background="DarkGray">
-        <Button x:Name="btnStartClient" Content="Connect" HorizontalAlignment="Left" Margin="110,11,0,0"
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="299*"/>
+            <ColumnDefinition Width="241*"/>
+        </Grid.ColumnDefinitions>
+        <Button x:Name="btnStartClient" Content="Connect" HorizontalAlignment="Left" Margin="110,9,0,0"
                 VerticalAlignment="Top" Width="116" Click="btnStartClient_Click" />
-        <TextBox x:Name="tbxIP" Text="" HorizontalAlignment="Left" Height="23" Margin="10,10,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="95"/>
+        <TextBox x:Name="tbxIP" Text="127.0.0.1" Padding="2.5" HorizontalAlignment="Left" Height="23" Margin="10,8,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="95"/>
 
         <TextBox x:Name="tbxConsole" ScrollViewer.HorizontalScrollBarVisibility="Auto"
                  ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.CanContentScroll="True"
                  Background="WhiteSmoke" HorizontalAlignment="Left" TextWrapping="Wrap" VerticalAlignment="Top"
-                 Margin="10,34,0,0" Height="265" Width="509" />
-        <TextBox x:Name="tbxSend" HorizontalAlignment="Left" Height="23" Margin="10,304,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="509"
-                 KeyDown="tbxSend_KeyDown"/>
+                 Margin="10,36,0,0" Height="265" Width="509" Grid.ColumnSpan="2" FontSize="14" />
+        <TextBox x:Name="tbxSend" HorizontalAlignment="Left" Height="23" Margin="10,306,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="509"
+                 KeyDown="tbxSend_KeyDown" Grid.ColumnSpan="2" FontSize="14"/>
     </Grid>
 </Window>
