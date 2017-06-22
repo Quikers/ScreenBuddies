@@ -13,7 +13,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UDPHolePunchingServer", "UD
 		{6C112851-2EAC-4254-A830-388BC2AE0D31} = {6C112851-2EAC-4254-A830-388BC2AE0D31}
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Networking", "..\Networking\Networking.csproj", "{6C112851-2EAC-4254-A830-388BC2AE0D31}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Networking", "Networking\Networking.csproj", "{6C112851-2EAC-4254-A830-388BC2AE0D31}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
