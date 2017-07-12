@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Net;
 using System.Windows;
-using System.Net.Sockets;
 using System.Threading;
-
+using System.Windows.Controls;
 using Networking;
 
 namespace ScreenBuddies {
@@ -17,19 +15,33 @@ namespace ScreenBuddies {
         public MainWindow() {
             InitializeComponent();
 
-            FConsole.Buffer = tbxConsole;
-
-            _socket = new TcpSocket();
-            _socket.ConnectionSuccessful += InitSocket;
-            _socket.ConnectionLost += DestroySocket;
-            _socket.DataReceived += DataReceived;
-            _socket.DataSent += DataSent;
+            FConsole.Textbox = tbxConsole;
         }
 
-        public void InitSocket( TcpSocket newConnection ) {
-            FConsole.WriteLine( "Connected successfully! " + newConnection.RemoteEndPoint );
+        private void ToggleConnectButtonEnabled( bool state ) {
+            btnStartClient.Dispatcher.Invoke( () => { btnStartClient.IsEnabled = state; } );
+        }
 
-            _socket.Receive();
+        public void InitSocket( TcpSocket socket ) {
+            FConsole.WriteLine( "Connected successfully! " + socket.RemoteEndPoint );
+
+            FConsole.WriteLine( "Receiving..." );
+            socket.Receive();
+            Thread t = new Thread( () => {
+
+                while ( socket.Connected ) {
+                    FConsole.WriteLine( "Still connected." );
+                    Thread.Sleep( 100 );
+                }
+                ToggleConnectButtonEnabled( true );
+            } ); t.Start();
+        }
+
+        public void ConnectionFailed( TcpSocket socket, Exception ex ) {
+            FConsole.WriteLine( "Connected failed! " + socket.RemoteEndPoint );
+            FConsole.WriteLine( ex.ToString() );
+
+            socket.Close();
         }
 
         public void DestroySocket( TcpSocket socket ) {
@@ -37,31 +49,49 @@ namespace ScreenBuddies {
             socket.Close();
         }
 
-        public void DataReceived( TcpSocket socket, byte[] data ) {
-            FConsole.WriteLine( "Received: " + TcpSocket.ByteArrayToObject<string>( data ) );
+        public void DataReceived( TcpSocket socket, Packet packet ) {
+            string message;
+            if ( !packet.TryParseContent( out message ) )
+                return;
+
+            FConsole.WriteLine( "Received: " + message );
         }
 
-        public void DataSent( TcpSocket socket, byte[] data ) {
-            FConsole.WriteLine( "Sent: " + TcpSocket.ByteArrayToObject<string>( data ) );
+        public void DataSent( TcpSocket socket, Packet packet ) {
+            string message;
+            if ( !packet.TryParseContent( out message ) )
+                return;
 
-            tbxSend.Dispatcher.Invoke(
-                () => {
-                    tbxSend.Text = "";
-                }
-            );
+            FConsole.WriteLine( "Sent: " + message );
+            FConsole.ClearTextBox( tbxSend );
         }
 
         private void btnStartClient_Click( object sender, RoutedEventArgs e ) {
-            Thread t = new Thread(
-                () => {
-                    _socket.Connect( "127.0.0.1", 20000 );
-                    
-                    while ( _socket.Connected ) {
-                        _socket.Receive();
-                    }
-                }
-            );
-            t.Start();
+            if (_socket == null)
+                _socket = new TcpSocket();
+
+            if ( _socket.Connected )
+                return;
+
+            string ip = tbxIP.Text;
+
+            ToggleConnectButtonEnabled( true );
+
+            _socket = new TcpSocket();
+            _socket.ConnectionSuccessful += InitSocket;
+            _socket.ConnectionFailed += ConnectionFailed;
+            _socket.ConnectionLost += DestroySocket;
+            _socket.DataReceived += DataReceived;
+            _socket.DataSent += DataSent;
+
+            _socket.Connect( ip, 20000 );
+        }
+
+        private void tbxIP_KeyDown( object sender, System.Windows.Input.KeyEventArgs e ) {
+            if ( e.Key != System.Windows.Input.Key.Enter )
+                return;
+
+            btnStartClient.RaiseEvent( new RoutedEventArgs( Button.ClickEvent ) );
         }
 
         private void tbxSend_KeyDown( object sender, System.Windows.Input.KeyEventArgs e ) {

@@ -72,8 +72,7 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
-    <Compile Include="NetworkingDataClasses.cs" />
-    <Compile Include="Startup, Background and fixes.cs" />
+    <Compile Include="FConsole.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>

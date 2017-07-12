@@ -1,14 +1,14 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.26206.0
+# Visual Studio 14
+VisualStudioVersion = 14.0.24720.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScreenBuddies", "ScreenBuddies.csproj", "{50F0B929-B407-4990-8A53-7DF4C4FECB2C}"
 	ProjectSection(ProjectDependencies) = postProject
 		{F766EAF9-14C1-4402-BA4A-C1D05D8CA58D} = {F766EAF9-14C1-4402-BA4A-C1D05D8CA58D}
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UDPHolePunchingServer", "UDPHolePunchingServer\UDPHolePunchingServer.csproj", "{F766EAF9-14C1-4402-BA4A-C1D05D8CA58D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScreenBuddiesServer", "UDPHolePunchingServer\ScreenBuddiesServer.csproj", "{F766EAF9-14C1-4402-BA4A-C1D05D8CA58D}"
 	ProjectSection(ProjectDependencies) = postProject
 		{6C112851-2EAC-4254-A830-388BC2AE0D31} = {6C112851-2EAC-4254-A830-388BC2AE0D31}
 	EndProjectSection
