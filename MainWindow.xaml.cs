@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Controls;
 using Networking;
 
@@ -19,7 +21,11 @@ namespace ScreenBuddies {
         }
 
         private void ToggleConnectButtonEnabled( bool state ) {
-            btnStartClient.Dispatcher.Invoke( () => { btnStartClient.IsEnabled = state; } );
+            try {
+                btnStartClient.Dispatcher.Invoke( () => {
+                    btnStartClient.Content = state ? "Connect" : "Disconnect";
+                } );
+            } catch ( TaskCanceledException ) { /* Ignored */ }
         }
 
         public void InitSocket( TcpSocket socket ) {
@@ -27,31 +33,37 @@ namespace ScreenBuddies {
 
             FConsole.WriteLine( "Receiving..." );
             socket.Receive();
-            Thread t = new Thread( () => {
-
+            ThreadHandler.Create( () => {
                 while ( socket.Connected ) {
-                    FConsole.WriteLine( "Still connected." );
+                    ToggleConnectButtonEnabled( false );
                     Thread.Sleep( 100 );
-                }
-                ToggleConnectButtonEnabled( true );
-            } ); t.Start();
+                } // Check if the socket is connected every 100ms
+                ToggleConnectButtonEnabled( true ); // If the socket disconnected, reenable the connect button.
+            } );
         }
 
         public void ConnectionFailed( TcpSocket socket, Exception ex ) {
-            FConsole.WriteLine( "Connected failed! " + socket.RemoteEndPoint );
-            FConsole.WriteLine( ex.ToString() );
-
-            socket.Close();
+            if ( socket == null || socket.IsClientNull )
+                return;
+            try {
+                FConsole.WriteLine( ex.ToString() );
+                FConsole.WriteLine( "Connected failed! " + socket.RemoteEndPoint );
+                socket.Close();
+            } catch ( Exception ) { /* ignored */ }
         }
 
         public void DestroySocket( TcpSocket socket ) {
-            FConsole.WriteLine( "Lost connection to the server. " + socket.RemoteEndPoint );
-            socket.Close();
+            if ( socket == null || socket.IsClientNull )
+                return;
+            try {
+                FConsole.WriteLine( "Lost connection to the server. " + socket.RemoteEndPoint );
+                socket.Close();
+            } catch ( Exception ) { /* ignored */ }
         }
 
         public void DataReceived( TcpSocket socket, Packet packet ) {
             string message;
-            if ( !packet.TryParseContent( out message ) )
+            if ( !packet.TryDeserializePacket( out message ) )
                 return;
 
             FConsole.WriteLine( "Received: " + message );
@@ -59,32 +71,38 @@ namespace ScreenBuddies {
 
         public void DataSent( TcpSocket socket, Packet packet ) {
             string message;
-            if ( !packet.TryParseContent( out message ) )
+            if ( !packet.TryDeserializePacket( out message ) )
                 return;
+
+            if ( message == "/disconnect" )
+                socket.Close();
 
             FConsole.WriteLine( "Sent: " + message );
             FConsole.ClearTextBox( tbxSend );
         }
 
         private void btnStartClient_Click( object sender, RoutedEventArgs e ) {
-            if (_socket == null)
+            if ((string) btnStartClient.Content == "Connect") {
+                if (_socket == null)
+                    _socket = new TcpSocket();
+
+                if (_socket.Connected)
+                    return;
+
+                string ip = tbxIP.Text;
+
+                ToggleConnectButtonEnabled(true);
+
                 _socket = new TcpSocket();
+                _socket.ConnectionSuccessful += InitSocket;
+                _socket.ConnectionFailed += ConnectionFailed;
+                _socket.ConnectionLost += DestroySocket;
+                _socket.DataReceived += DataReceived;
+                _socket.DataSent += DataSent;
 
-            if ( _socket.Connected )
-                return;
-
-            string ip = tbxIP.Text;
-
-            ToggleConnectButtonEnabled( true );
-
-            _socket = new TcpSocket();
-            _socket.ConnectionSuccessful += InitSocket;
-            _socket.ConnectionFailed += ConnectionFailed;
-            _socket.ConnectionLost += DestroySocket;
-            _socket.DataReceived += DataReceived;
-            _socket.DataSent += DataSent;
-
-            _socket.Connect( ip, 20000 );
+                _socket.Connect(ip, 20000);
+            } else
+                DestroySocket( _socket );
         }
 
         private void tbxIP_KeyDown( object sender, System.Windows.Input.KeyEventArgs e ) {
@@ -99,6 +117,11 @@ namespace ScreenBuddies {
                 return;
 
             _socket.Send( tbxSend.Text );
+        }
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e) {
+            ThreadHandler.StopAllThreads();
+            Environment.Exit(0);
         }
     }
 }

@@ -10,10 +10,9 @@ namespace Networking {
 
         private TcpClient _socket;
         private NetworkStream Stream => _socket.GetStream();
-        private Thread _sendThread;
-        private Thread _receiveThread;
         public EndPoint LocalEndPoint => _socket.Client.LocalEndPoint;
         public EndPoint RemoteEndPoint => _socket.Client.RemoteEndPoint;
+        public bool IsClientNull => _socket == null;
         public bool Connected => _socket.Connected;
 
         public event TcpClientEventHandler ConnectionSuccessful;
@@ -47,14 +46,15 @@ namespace Networking {
 
         public void Close() { _socket.Close(); }
 
+        public void Send( object data ) { Send( new Packet( data ) ); }
         public void Send( Packet data ) {
             if ( !Connected )
                 return;
 
-            _sendThread = new Thread(
+            ThreadHandler.Create( // Initiate the sender thread
                 () => {
                     try {
-                        byte[] buffer = data.PacketToByteArray();
+                        byte[] buffer = data.SerializePacket();
                         Stream.Write( buffer, 0, buffer.Length );
 
                         DataSent?.Invoke( this, new Packet( buffer ) );
@@ -62,14 +62,14 @@ namespace Networking {
                         ConnectionLost?.Invoke( this );
                     }
                 }
-            ); _sendThread.Start();
+            );
         }
 
         public void Receive( int bufferSize = 128 ) {
             if ( !Connected )
                 return;
 
-            _receiveThread = new Thread(
+            ThreadHandler.Create( // Initiate the receiver thread
                 () => {
                     bool error = false;
                     do {
@@ -87,12 +87,10 @@ namespace Networking {
                         }
                     } while ( Connected && !error );
                 }
-            ); _receiveThread.Start();
+            );
         }
 
-        private void PacketParseFailed( Packet packet ) {
-            Console.WriteLine( "Failed to convert packet with type \"" + packet.Type + "\" to type \"string\"" );
-        }
+        private void PacketParseFailed( Packet packet ) { Console.WriteLine( "Failed to convert packet with type \"" + packet.Type + "\" to type \"string\"" ); }
 
     }
 

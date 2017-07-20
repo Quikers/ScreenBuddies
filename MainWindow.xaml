@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ScreenBuddies"
         mc:Ignorable="d"
-        Title="MainWindow" SizeToContent="WidthAndHeight">
+        Title="MainWindow" SizeToContent="WidthAndHeight" Closing="Window_Closing">
     <Grid Background="DarkGray" Width="592" Height="370">
         <Button x:Name="btnStartClient" Content="Connect" HorizontalAlignment="Left" Margin="110,10,0,0"
                 VerticalAlignment="Top" Width="116" Click="btnStartClient_Click" Height="23" />
