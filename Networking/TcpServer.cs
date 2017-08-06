@@ -1,33 +1,32 @@
-﻿using System.Net;
+﻿using System;
+using System.Net;
 using System.Net.Sockets;
 
 namespace Networking {
 
-    public class TcpServer {
+    public class TcpServer : TcpListener {
 
-        private TcpListener _listener;
+        public event TcpSocketEventHandler ClientConnectionRequested;
 
-        public EndPoint LocalEndPoint => _listener.LocalEndpoint;
-        public event TcpClientEventHandler ClientConnectionRequested;
+        public EndPoint LocalEndPoint => LocalEndpoint;
 
-        public TcpServer( int port ) {
-            _listener = new TcpListener( IPAddress.Any, port );
+        public TcpServer( int port, TcpSocketEventHandler callback ) : base( IPAddress.Any, port ) {
+            ClientConnectionRequested += callback;
+            BeginAccepting();
+        }
+        public TcpServer( IPAddress ip, int port, TcpSocketEventHandler callback ) : base( ip, port ) {
+            ClientConnectionRequested += callback;
+            BeginAccepting();
         }
 
         private void BeginAccepting() {
-            _listener.BeginAcceptTcpClient(
-                ar => {
-                    TcpListener listener = ( TcpListener )ar.AsyncState;
-                    TcpSocket socket = new TcpSocket( listener.EndAcceptTcpClient( ar ) );
-                    ClientConnectionRequested?.Invoke( socket );
+            Start();
+            BeginAcceptTcpClient( ar => {
+                TcpSocket socket = new TcpSocket( ( ( TcpListener )ar.AsyncState ).EndAcceptTcpClient( ar ) );
+                ClientConnectionRequested?.Invoke( socket );
 
-                    BeginAccepting();
-                }, _listener );
-        }
-
-        public void Start() {
-            _listener.Start();
-            BeginAccepting();
+                BeginAccepting();
+            }, this );
         }
 
     }

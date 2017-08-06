@@ -1,12 +1,30 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Threading.Tasks;
 using System.Windows.Controls;
 using System.Windows.Threading;
 
 namespace ScreenBuddies {
 
-    
+    public partial class MainWindow {
+        public bool FirstLaunch {
+            get => ConfigurationManager.AppSettings[ "firstLaunch" ] == null || Convert.ToBoolean( ConfigurationManager.AppSettings[ "firstLaunch" ] );
+            set => ConfigurationManager.AppSettings[ "firstLaunch" ] = value.ToString().ToLower();
+        }
+        public string Username {
+            get => ConfigurationManager.AppSettings[ "username" ];
+            set { UsernameIsUnique = true; ConfigurationManager.AppSettings[ "username" ] = value; }
+        }
+        public string Hostname {
+            get => ConfigurationManager.AppSettings[ "host" ];
+            set => ConfigurationManager.AppSettings[ "host" ] = value;
+        }
+        public int Port {
+            get => Convert.ToInt16( ConfigurationManager.AppSettings[ "port" ] );
+            set => ConfigurationManager.AppSettings[ "port" ] = value.ToString();
+        }
+    }
 
     public static class FConsole {
 
@@ -18,7 +36,7 @@ namespace ScreenBuddies {
 
         private static TextBox _textbox;
         public static TextBox Textbox {
-            get { return _textbox; }
+            get { try { return _textbox; } catch ( Exception ) { return null; } }
             set {
                 if ( value == null ) return;
                 _textbox = value;
@@ -57,6 +75,10 @@ namespace ScreenBuddies {
         }
 
         public static void WriteLine( string text ) { Write( text + "\n" ); }
+        public static void WriteLine( object obj ) { Write( obj + "\n" ); }
+
+        public static void Write( object obj ) { Write( obj.ToString() ); }
+
         public static void Write( string text ) { _buffers.Add( text ); }
 
     }

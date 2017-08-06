@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
+using System.IO;
+using System.Net.Sockets;
 using System.Windows;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,116 +15,135 @@ namespace ScreenBuddies {
     /// </summary>
     public partial class MainWindow : Window {
 
-        private TcpSocket _socket;
+        public static TcpSocket Socket = new TcpSocket();
+        public bool UsernameIsUnique;
 
         public MainWindow() {
             InitializeComponent();
-
+            
             FConsole.Textbox = tbxConsole;
+            Data.Users.AddUsersAutomatically = false;
+            
+            //Hostname = "Quikers.xyz";
+            Hostname = "127.0.0.1";
+            Port = 20000;
+            Username = "Quikers";
+
+            Settings settingsWindow = new Settings();
+            settingsWindow.ShowDialog();
         }
 
-        private void ToggleConnectButtonEnabled( bool state ) {
-            try {
-                btnStartClient.Dispatcher.Invoke( () => {
-                    btnStartClient.Content = state ? "Connect" : "Disconnect";
-                } );
-            } catch ( TaskCanceledException ) { /* Ignored */ }
-        }
+        private void Window_Loaded( object sender, RoutedEventArgs e ) { LoopConnection(); }
 
-        public void InitSocket( TcpSocket socket ) {
-            FConsole.WriteLine( "Connected successfully! " + socket.RemoteEndPoint );
-
-            FConsole.WriteLine( "Receiving..." );
-            socket.Receive();
+        private void LoopConnection() {
+            Socket = new TcpSocket();
             ThreadHandler.Create( () => {
-                while ( socket.Connected ) {
-                    ToggleConnectButtonEnabled( false );
-                    Thread.Sleep( 100 );
-                } // Check if the socket is connected every 100ms
-                ToggleConnectButtonEnabled( true ); // If the socket disconnected, reenable the connect button.
+                while ( UsernameIsUnique ) {
+                    Thread.Sleep( 1000 );
+
+                    try {
+                        if ( Socket == null )
+                            Socket = new TcpSocket();
+
+                        if ( Socket != null && Socket.Connected )
+                            continue;
+
+                        Socket = new TcpSocket();
+                        if ( Socket != null ) {
+                            Socket.ConnectionSuccessful += InitSocket;
+                            Socket.ConnectionFailed += ConnectionFailed;
+                            Socket.ConnectionLost += DestroySocket;
+                            Socket.DataReceived += DataReceived;
+                            Socket.DataSent += DataSent;
+
+                            Socket.Connect( Hostname, Port );
+                        }
+                    } catch ( Exception ex ) { FConsole.WriteLine( ex ); break; }
+                }
             } );
         }
 
-        public void ConnectionFailed( TcpSocket socket, Exception ex ) {
-            if ( socket == null || socket.IsClientNull )
-                return;
-            try {
-                FConsole.WriteLine( ex.ToString() );
-                FConsole.WriteLine( "Connected failed! " + socket.RemoteEndPoint );
-                socket.Close();
-            } catch ( Exception ) { /* ignored */ }
+        public void InitSocket( TcpSocket socket ) {
+            FConsole.WriteLine( $"Connected successfully to {Hostname}" );
+
+            socket.Receive();
+            socket.Send( new User( Username ) );
         }
 
-        public void DestroySocket( TcpSocket socket ) {
-            if ( socket == null || socket.IsClientNull )
+        public void ConnectionFailed( TcpSocket socket, Exception ex ) { /* Called every second */ }
+
+        public void DestroySocket( TcpSocket socket, Exception ex ) {
+            if ( socket == null )
                 return;
             try {
-                FConsole.WriteLine( "Lost connection to the server. " + socket.RemoteEndPoint );
+                string error = "";
+                if ( ex.GetType() != typeof( IOException ) && ex.GetType() != typeof( NullReferenceException ) )
+                    error = "\n" + ex;
+                FConsole.WriteLine( $"Lost connection to the server.{error}" );
                 socket.Close();
             } catch ( Exception ) { /* ignored */ }
         }
 
         public void DataReceived( TcpSocket socket, Packet packet ) {
-            string message;
-            if ( !packet.TryDeserializePacket( out message ) )
+            if ( packet.Type == null ) {
+                DestroySocket( socket, new IOException( "Empty data received." ) );
                 return;
+            }
 
-            FConsole.WriteLine( "Received: " + message );
+            switch ( packet.Type.Name.ToLower() ) {
+                default:
+                    FConsole.WriteLine( $"Packet contained an unknown type: {packet.Type.Name}" );
+                    break;
+                case "string":
+                    string message;
+                    if ( !packet.TryDeserializePacket( out message ) )
+                        break;
+                    FConsole.WriteLine( message );
+                    break;
+                case "command":
+                    Command command;
+                    if ( !packet.TryDeserializePacket( out command ) )
+                        break;
+                    FConsole.WriteLine( $"Received a command from the server: {command}" );
+
+                    if ( command != Command.UsernameTaken )
+                        break;
+
+                    UsernameIsUnique = false;
+                    FConsole.WriteLine( "Username is already taken" );
+                    break;
+                case "users":
+                    Users users;
+                    if ( !packet.TryDeserializePacket( out users ) )
+                        break;
+
+                    Data.Users = users;
+                    lbUsers.Dispatcher.Invoke( () => {
+                        lbUsers.Items.Clear();
+                        foreach ( User user in Data.Users )
+                            lbUsers.Items.Add( new ListBoxItem { Content = user.Username } );
+                    } );
+                    break;
+            }
         }
 
-        public void DataSent( TcpSocket socket, Packet packet ) {
-            string message;
-            if ( !packet.TryDeserializePacket( out message ) )
-                return;
-
-            if ( message == "/disconnect" )
-                socket.Close();
-
-            FConsole.WriteLine( "Sent: " + message );
-            FConsole.ClearTextBox( tbxSend );
-        }
-
-        private void btnStartClient_Click( object sender, RoutedEventArgs e ) {
-            if ((string) btnStartClient.Content == "Connect") {
-                if (_socket == null)
-                    _socket = new TcpSocket();
-
-                if (_socket.Connected)
-                    return;
-
-                string ip = tbxIP.Text;
-
-                ToggleConnectButtonEnabled(true);
-
-                _socket = new TcpSocket();
-                _socket.ConnectionSuccessful += InitSocket;
-                _socket.ConnectionFailed += ConnectionFailed;
-                _socket.ConnectionLost += DestroySocket;
-                _socket.DataReceived += DataReceived;
-                _socket.DataSent += DataSent;
-
-                _socket.Connect(ip, 20000);
-            } else
-                DestroySocket( _socket );
-        }
-
-        private void tbxIP_KeyDown( object sender, System.Windows.Input.KeyEventArgs e ) {
-            if ( e.Key != System.Windows.Input.Key.Enter )
-                return;
-
-            btnStartClient.RaiseEvent( new RoutedEventArgs( Button.ClickEvent ) );
-        }
+        public void DataSent( TcpSocket socket, Packet packet ) { FConsole.ClearTextBox( tbxSend ); }
 
         private void tbxSend_KeyDown( object sender, System.Windows.Input.KeyEventArgs e ) {
             if ( e.Key != System.Windows.Input.Key.Enter )
                 return;
 
-            _socket.Send( tbxSend.Text );
+            Socket.Send( tbxSend.Text );
         }
 
-        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e) {
+        private void Window_Closing( object sender, System.ComponentModel.CancelEventArgs e ) {
             ThreadHandler.StopAllThreads();
-            Environment.Exit(0);
+            Environment.Exit( 0 );
+        }
+
+        private void Window_SizeChanged( object sender, SizeChangedEventArgs e ) {
+            Width = e.NewSize.Width;
+            Height = e.NewSize.Height;
         }
     }
 }

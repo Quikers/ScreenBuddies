@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
@@ -15,8 +16,7 @@ namespace Networking {
 
         // VARIABLES
 
-        public Type Type => Content.GetType();
-        public string SuggestedType;
+        public Type Type { get { try { return Content.GetType(); } catch ( Exception ) { return null; } } }
         public object Content;
 
         // CONSTRUCTORS
@@ -34,7 +34,7 @@ namespace Networking {
         /// Create a <see cref="Packet"/> from a <see cref="byte"/> array.
         /// </summary>
         /// <param name="bytes">The <see cref="byte"/> array to convert from</param>
-        public Packet( byte[] bytes ) { Content = Deserialize( bytes ); ParseFailed += ParseFailedMessage; }
+        public Packet( IEnumerable<byte> bytes ) { Content = Deserialize( bytes ); ParseFailed += ParseFailedMessage; }
 
         // FUNCTIONS
 
@@ -94,8 +94,12 @@ namespace Networking {
         /// <typeparam name="T">The type to convert the <see cref="byte"/> array into</typeparam>
         /// <param name="bytes">The <see cref="byte"/> array to convert to an <see cref="object"/> of the specified type</param>
         /// <returns>The converted <see cref="byte"/> array as an <see cref="object"/> of the specified type</returns>
-        private static object Deserialize( byte[] bytes ) {
-            using ( MemoryStream ms = new MemoryStream( bytes ) )
+        private static object Deserialize( IEnumerable< byte > bytes ) {
+            byte[] byteArray = bytes as byte[] ?? bytes.ToArray();
+            if ( byteArray.Length <= 0 )
+                return null;
+
+            using ( MemoryStream ms = new MemoryStream( byteArray ) )
                 return new BinaryFormatter().Deserialize( ms );
         }
 

@@ -2,71 +2,82 @@
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
-using System.Threading;
 
 namespace Networking {
 
-    public class TcpSocket {
+    public class TcpSocket : TcpClient {
 
-        private TcpClient _socket;
-        private NetworkStream Stream => _socket.GetStream();
-        public EndPoint LocalEndPoint => _socket.Client.LocalEndPoint;
-        public EndPoint RemoteEndPoint => _socket.Client.RemoteEndPoint;
-        public bool IsClientNull => _socket == null;
-        public bool Connected => _socket.Connected;
-
-        public event TcpClientEventHandler ConnectionSuccessful;
-        public event TcpClientErrorEventHandler ConnectionFailed;
-        public event TcpClientEventHandler ConnectionLost;
+        public event TcpSocketEventHandler ConnectionSuccessful;
+        public event TcpSocketErrorEventHandler ConnectionFailed;
+        public event TcpSocketErrorEventHandler ConnectionLost;
         public event TcpDataEventHandler DataReceived;
         public event TcpDataEventHandler DataSent;
 
-        public TcpSocket() { _socket = new TcpClient(); }
-        public TcpSocket( TcpClient socket ) { _socket = socket; }
+        public NetworkStream Stream { get { try { return GetStream(); } catch (Exception) { return null; } } }
+        public EndPoint LocalEndPoint { get { try { return Client.LocalEndPoint; } catch ( Exception ) { return null; } } }
+        public EndPoint RemoteEndPoint { get { try { return Client.RemoteEndPoint; } catch ( Exception ) { return null; } } }
 
-        public void Connect( string hostname, int port ) {
-            IPAddress ip;
-            if ( !IPAddress.TryParse( hostname, out ip ) )
+        /// <summary>
+        /// Creates a new instance of the <see cref="TcpSocket"/> class.
+        /// </summary>
+        public TcpSocket() { }
+        /// <summary>
+        /// Creates a new instance of the <see cref="TcpSocket"/> class and automatically connects it to the given IP and port.
+        /// </summary>
+        public TcpSocket( string hostname, int port ) { Connect( hostname, port ); }
+        /// <summary>
+        /// Converts a TcpClient to a TcpSocket.
+        /// </summary>
+        public TcpSocket( TcpClient socket ) { Client = socket.Client; }
+
+        public new void Connect( string hostname, int port ) {
+            if ( !IPAddress.TryParse( hostname, out IPAddress ip ) )
                 ip = Dns.GetHostAddresses( hostname )[ 0 ];
             if ( ip == null )
                 throw new Exception( "Could not resolve hostname \"" + hostname + "\"" );
 
-            _socket.BeginConnect( ip.ToString(), port,
-                ar => {
-                    try {
-                        TcpClient client = ( TcpClient )ar.AsyncState;
-                        client.EndConnect( ar );
+            BeginConnect( ip.ToString(), port, ar => {
+                try {
+                    EndConnect( ar );
 
+                    if ( ( ( TcpSocket )ar.AsyncState ).Connected ) {
                         ConnectionSuccessful?.Invoke( this );
-                    } catch ( Exception ex ) {
-                        ConnectionFailed?.Invoke( this, ex );
-                    }
-                }, _socket );
+                    } else
+                        ConnectionFailed?.Invoke( this, null );
+                } catch ( Exception ex ) {
+                    ConnectionFailed?.Invoke( this, ex );
+                }
+            }, this
+            );
         }
 
-        public void Close() { _socket.Close(); }
+        public new void Close() {
+            base.Close();
+            Stream?.Close();
+        }
 
         public void Send( object data ) { Send( new Packet( data ) ); }
+
         public void Send( Packet data ) {
-            if ( !Connected )
+            if ( Stream == null || !Connected )
                 return;
 
             ThreadHandler.Create( // Initiate the sender thread
                 () => {
                     try {
                         byte[] buffer = data.SerializePacket();
-                        Stream.Write( buffer, 0, buffer.Length );
+                        Stream?.Write( buffer, 0, buffer.Length );
 
-                        DataSent?.Invoke( this, new Packet( buffer ) );
-                    } catch ( SocketException ) {
-                        ConnectionLost?.Invoke( this );
+                        DataSent?.Invoke( this, data );
+                    } catch ( Exception ex ) {
+                        ConnectionLost?.Invoke( this, ex );
                     }
                 }
             );
         }
 
         public void Receive( int bufferSize = 128 ) {
-            if ( !Connected )
+            if ( Stream == null || !Connected )
                 return;
 
             ThreadHandler.Create( // Initiate the receiver thread
@@ -74,20 +85,29 @@ namespace Networking {
                     bool error = false;
                     do {
                         try {
-                            byte[] temp = new byte[ bufferSize ];
-                            int length = Stream.Read( temp, 0, temp.Length );
-                            List<byte> buffer = new List<byte>( temp ).GetRange( 0, length );
-
-                            Packet packet = new Packet( buffer.ToArray() );
+                            Packet packet = ReceiveOnce();
                             packet.ParseFailed += PacketParseFailed;
                             DataReceived?.Invoke( this, packet );
-                        } catch ( Exception ) {
+                        } catch ( Exception ex ) {
                             error = true;
-                            ConnectionLost?.Invoke( this );
+                            if ( ex.ToString().Contains( "WSACancelBlockingCall" ) )
+                                break;
+                            
+                            ConnectionLost?.Invoke( this, ex );
                         }
                     } while ( Connected && !error );
                 }
             );
+        }
+
+        public Packet ReceiveOnce( int bufferSize = 4096 ) {
+            if ( Stream == null || !Connected )
+                return null;
+
+            byte[] bytes = new byte[ bufferSize ];
+            int length = Stream.Read( bytes, 0, bytes.Length );
+
+            return new Packet( new List<byte>( bytes ).GetRange( 0, length ) );
         }
 
         private void PacketParseFailed( Packet packet ) { Console.WriteLine( "Failed to convert packet with type \"" + packet.Type + "\" to type \"string\"" ); }
