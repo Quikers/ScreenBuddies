@@ -76,5 +76,11 @@
       <Install>false</Install>
     </BootstrapperPackage>
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Csharp Networking Library\Csharp Networking Library\Networking.csproj">
+      <Project>{6c112851-2eac-4254-a830-388bc2ae0d31}</Project>
+      <Name>Networking</Name>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
