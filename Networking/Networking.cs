@@ -1,53 +1,186 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Threading;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+using System.Threading.Tasks;
 
 namespace Networking {
 
-    [Serializable]
-    public enum Command {
-        None,
-        Disconnect,
-        Kick,
-        UsernameTaken
-    }
+    #region Event Handlers
 
-    public delegate void TcpSocketEventHandler( TcpSocket socket );
-    public delegate void TcpSocketErrorEventHandler( TcpSocket socket, Exception ex );
-    public delegate void TcpPacketEventHandler( Packet packet );
+    public delegate void UdpDataEventHandler( UdpSocket socket, Packet packet );
     public delegate void TcpDataEventHandler( TcpSocket socket, Packet packet );
 
-    public static class ThreadHandler {
-        private static List<Thread> _threadList = new List<Thread>();
+    #endregion
 
-        public static Thread Create( ParameterizedThreadStart callback ) {
-            Thread t = new Thread( callback );
-            t.Start();
+    public class Server {
 
-            _threadList.Add( t );
-            return t;
-        }
-        public static Thread Create( ThreadStart callback ) {
-            Thread t = new Thread( callback );
-            t.Start();
+        #region Event Handlers
 
-            _threadList.Add( t );
-            return t;
+        public delegate void TcpServerUserEventHandler( User user );
+
+        #endregion
+
+        #region Events
+
+        public event TcpServerUserEventHandler OnClientConnected;
+        public event TcpServerUserEventHandler OnClientDisconnected;
+
+        public event TcpDataEventHandler OnPacketReceived;
+
+        private event TcpSocketEventHandler ClientDisconnected;
+        private event TcpSocketErrorEventHandler ClientErrorDiscovered;
+
+        #endregion
+
+        #region Local Variables
+
+        public TcpServer _listener { get; private set; }
+
+        public IPAddress IP { get; private set; }
+        public int Port { get; private set; }
+        public bool ServerActive { get; private set; }
+        public bool ReceivingFromAllClients { get; private set; }
+
+        public UserList Clients { get => Data.UserList; private set => Data.UserList = value; }
+
+        #endregion
+
+        #region Constructors
+
+        public Server() { }
+
+        public Server( int port ) {
+            IP = IPAddress.Any;
+            Port = port;
         }
 
-        public static void Remove( Thread t ) {
-            _threadList[ _threadList.IndexOf( t ) ].Abort();
-            _threadList.Remove( t );
-        }
-        public static void RemoveAt( int index ) {
-            _threadList[ index ].Abort();
-            _threadList.RemoveAt( index );
+        public Server( IPAddress ip, int port ) {
+            IP = ip;
+            Port = port;
         }
 
-        public static void StopAllThreads() {
-            foreach ( Thread t in _threadList )
-                t.Abort();
+        #endregion
+
+        #region Event Callbacks
+
+        private void ClientFoundCallback( TcpSocket client ) {
+            client.ConnectionLost += ClientErrorDiscovered;
+
+            if ( !Clients.Exists( client ) )
+                Clients.CreateTempUser( client );
+
+            OnClientConnected?.Invoke( Clients[ client ] );
         }
+
+        private void ClientErrorDiscoveredCallback( TcpSocket client, Exception ex ) {
+            // TODO: Fix error messaging (check when exactly client disconnects/crashes on the client side)
+            ClientDisconnected?.Invoke( client );
+        }
+
+        private void ClientDisconnectedCallback( TcpSocket client ) {
+            User u = Data.UserList[ client ] ?? new User( client );
+            Clients.RemoveUser( client );
+
+            OnClientDisconnected?.Invoke( u );
+        }
+
+        #endregion
+
+        #region Methods
+
+        #region Server Status Methods
+
+        public void StartListening() {
+            if ( !_listener.Server.IsBound )
+                _listener.Start();
+        }
+        public void StopListening() {
+            if ( _listener.Server.IsBound )
+                _listener.Stop();
+        }
+
+        public void RestartServer() => RestartServer( IP, Port );
+        public void RestartServer( IPAddress ip, int port ) {
+            IP = ip ?? IPAddress.Any;
+            Port = port > 0 ? port : 7777;
+            Clients.Clear();
+            ServerActive = true;
+
+            _listener = new TcpServer( IP, Port, ClientFoundCallback );
+            ClientErrorDiscovered += ClientErrorDiscoveredCallback;
+            ClientDisconnected += ClientDisconnectedCallback;
+        }
+
+        // DIFFERENCE IS THAT "StartServer()" CHECKS IF THE SERVER IS ALREADY ON, AND IF SO DOES ABSOLUTELY NOTHING.
+
+        public void StartServer() => StartServer( IP, Port );
+        public void StartServer( IPAddress ip, int port ) {
+            if ( _listener != null && _listener.Server.IsBound )
+                return;
+
+            RestartServer( ip, port );
+        }
+
+        public void StopServer() {
+            _listener.Stop();
+
+            while ( Clients.Where( c => c != null && c.ConnectionInfo.Connected ).ToList().Count > 0 )
+                foreach ( User user in Clients )
+                    user.ConnectionInfo.Close();
+
+            Clients.Clear();
+            ServerActive = false;
+        }
+
+        #endregion
+
+        #region Packet Traffic Methods
+
+        public void Send( object obj, TcpSocket client ) => Send( new Packet( obj ), client );
+        public void Send( Packet packet, TcpSocket client ) {
+            if ( client != null && client.Connected )
+                client.Send( packet );
+            else
+                ClientDisconnected?.Invoke( client );
+        }
+
+        public void Broadcast( object obj ) => Broadcast( new Packet( obj ) );
+        public void Broadcast( Packet packet ) {
+            Task.Run( () => {
+                foreach ( User user in Clients.Where( c => c?.ConnectionInfo != null && c.ConnectionInfo.Connected ) )
+                    Send( packet, user.ConnectionInfo );
+            } );
+        }
+
+        #region Old unused shit
+
+        public void StopReceivingFromAllClients() => ReceivingFromAllClients = false;
+
+        public void ReceiveFromAllClients() {
+            Task.Run( () => {
+                ReceivingFromAllClients = true;
+                while ( ServerActive && ReceivingFromAllClients ) {
+                    foreach ( User user in Clients.Where( c => c != null && c.ConnectionInfo.Connected ) ) {
+                        if ( !ServerActive || !ReceivingFromAllClients )
+                            return;
+
+                        try {
+                            OnPacketReceived?.Invoke( user.ConnectionInfo, user.ConnectionInfo.ReceiveOnce() );
+                        } catch ( Exception ex ) {
+                            ClientErrorDiscovered?.Invoke( user.ConnectionInfo, ex );
+                        }
+                    }
+                }
+            } );
+        }
+
+        #endregion
+
+        #endregion
+
+        #endregion
+
     }
 
 }

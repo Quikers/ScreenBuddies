@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.26430.16
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Server", "UDP client and server test\Server.csproj", "{951B5215-499B-4A0E-846B-61F9B7CFC2FF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client", "Client\Client.csproj", "{02906D2F-28AD-4F30-99F3-24185A7F06F5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Networking", "..\Networking\Networking.csproj", "{6C112851-2EAC-4254-A830-388BC2AE0D31}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{951B5215-499B-4A0E-846B-61F9B7CFC2FF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{951B5215-499B-4A0E-846B-61F9B7CFC2FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{951B5215-499B-4A0E-846B-61F9B7CFC2FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{951B5215-499B-4A0E-846B-61F9B7CFC2FF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{02906D2F-28AD-4F30-99F3-24185A7F06F5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{02906D2F-28AD-4F30-99F3-24185A7F06F5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{02906D2F-28AD-4F30-99F3-24185A7F06F5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{02906D2F-28AD-4F30-99F3-24185A7F06F5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6C112851-2EAC-4254-A830-388BC2AE0D31}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6C112851-2EAC-4254-A830-388BC2AE0D31}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6C112851-2EAC-4254-A830-388BC2AE0D31}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6C112851-2EAC-4254-A830-388BC2AE0D31}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

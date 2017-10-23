@@ -1,57 +1,53 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace Networking {
 
-    #region Event Handlers
-
-    public delegate void TcpSocketEventHandler( TcpSocket socket );
-    public delegate void UdpSocketEventHandler( UdpSocket socket );
-    public delegate void TcpSocketErrorEventHandler( TcpSocket socket, Exception ex );
-    public delegate void UdpSocketErrorEventHandler( UdpSocket socket, Exception ex );
-
-    #endregion
-
-    public class TcpSocket {
+    public class UdpSocket {
 
         #region Events
 
-        public event TcpSocketEventHandler ConnectionSuccessful;
-        public event TcpSocketErrorEventHandler ConnectionFailed;
-        public event TcpSocketErrorEventHandler ConnectionLost;
-        public event TcpDataEventHandler DataReceived;
-        public event TcpDataEventHandler DataSent;
+        public event UdpSocketEventHandler ConnectionSuccessful;
+        public event UdpSocketErrorEventHandler ConnectionFailed;
+        public event UdpSocketErrorEventHandler ConnectionLost;
+        public event UdpDataEventHandler DataReceived;
+        public event UdpDataEventHandler DataSent;
 
         #endregion
 
         #region Local Variables
 
-        private TcpClient _socket = new TcpClient();
+        private UdpClient _socket = new UdpClient();
+        private IPEndPoint _serverEP;
+        public bool Connected;
 
-        public NetworkStream Stream { get { try { return _socket.GetStream(); } catch ( Exception ) { return null; } } }
+        public int LocalPort { get { try { return int.Parse( _socket.Client.LocalEndPoint.ToString().Split( ':' )[ 1 ] ); } catch ( Exception ) { return 0; } } }
+        public IPAddress LocalIP { get { try { return IPAddress.Parse( _socket.Client.LocalEndPoint.ToString().Split( ':' )[ 0 ] ); } catch ( Exception ) { return null; } } }
         public EndPoint LocalEndPoint { get { try { return _socket.Client.LocalEndPoint; } catch ( Exception ) { return null; } } }
         public EndPoint RemoteEndPoint { get { try { return _socket.Client.RemoteEndPoint; } catch ( Exception ) { return null; } } }
-        public bool Connected { get { try { return _socket.Connected; } catch( Exception ) { return false; } } }
 
         #endregion
 
         #region Constructors
 
         /// <summary>
-        /// Creates a new instance of the <see cref="TcpSocket"/> class.
+        /// Creates a new instance of the <see cref="UdpSocket"/> class.
         /// </summary>
-        public TcpSocket() { }
+        public UdpSocket() { }
+
         /// <summary>
-        /// Creates a new instance of the <see cref="TcpSocket"/> class and automatically connects it to the given IP and port.
+        /// Creates a new instance of the <see cref="UdpSocket"/> class and automatically connects it to the given IP and port.
         /// </summary>
-        public TcpSocket( string hostname, int port ) { _socket.Connect( hostname, port ); }
+        public UdpSocket( string hostname, int port ) => Connect( hostname, port );
         /// <summary>
-        /// Converts a TcpClient to a TcpSocket.
+        /// Converts a <see cref="UdpClient"/> to a <see cref="UdpSocket"/>.
         /// </summary>
-        public TcpSocket( TcpClient socket ) { _socket = socket; }
+        public UdpSocket( UdpClient socket ) { _socket = socket; }
 
         #endregion
 
@@ -68,27 +64,36 @@ namespace Networking {
             if ( ip == null )
                 throw new Exception( "Could not resolve hostname \"" + hostname + "\"" );
 
-            _socket.BeginConnect( ip.ToString(), port, ar => {
-                try {
-                    _socket.EndConnect( ar );
+            _serverEP = new IPEndPoint( ip, port );
+            Send( new Login {
+                Username = "UNKNOWN",
+                LocalEndPoint = new IPEndPoint( IPAddress.Parse( LocalEndPoint.ToString().Split( ':' )[ 0 ] ), int.Parse( LocalEndPoint.ToString().Split( ':' )[ 1 ] ) ),
+                RemoteEndPoint = new IPEndPoint( IPAddress.Parse( RemoteEndPoint.ToString().Split( ':' )[ 0 ] ), int.Parse( RemoteEndPoint.ToString().Split( ':' )[ 1 ] ) )
+            } );
 
-                    if ( ( ( TcpSocket )ar.AsyncState )._socket.Connected ) {
-                        ConnectionSuccessful?.Invoke( this );
-                    } else
-                        ConnectionFailed?.Invoke( this, null );
-                } catch ( Exception ex ) {
-                    ConnectionFailed?.Invoke( this, ex );
-                }
-            }, this );
+            Packet p = ReceiveOnce();
+            if ( p.Type.Name.ToLower() != "command" ) {
+                Connect( hostname, port );
+                return;
+            }
+
+            if ( !p.TryDeserializePacket( out Command cmd ) )
+                throw new InvalidCastException( "Could not convert packet of type \"{p.Type.Name}\", was the packet corrupted?" );
+
+            if ( cmd.Type == CommandType.UsernameTaken ) {
+                Console.WriteLine( "Could not connect to the server: Username was already taken." );
+                return;
+            }
+
+            Connected = true;
         }
 
         public void Close() { Close( true ); }
         public void Close( bool invokeConnectionLostEvent ) {
-            if ( _socket.Connected && invokeConnectionLostEvent )
+            if ( invokeConnectionLostEvent )
                 ConnectionLost?.Invoke( this, null );
 
-            _socket.Close();
-            Stream?.Close();
+            // TODO: BREAK CONNECTION TO SERVER
         }
 
         #endregion
@@ -98,14 +103,14 @@ namespace Networking {
         public void Send( object data ) { Send( new Packet( data ) ); }
 
         public void Send( Packet data ) {
-            if ( Stream == null || !_socket.Connected )
+            if ( !Connected )
                 return;
 
             Task.Run( // Initiate the sender thread
                 () => {
                     try {
                         byte[] buffer = data.SerializePacket();
-                        Stream?.Write( buffer, 0, buffer.Length );
+                        _socket.Send( buffer, buffer.Length, _serverEP );
 
                         DataSent?.Invoke( this, data );
                     } catch ( Exception ex ) {
@@ -116,7 +121,7 @@ namespace Networking {
         }
 
         public void Receive( int bufferSize = 128 ) {
-            if ( Stream == null || !_socket.Connected )
+            if ( !Connected )
                 return;
 
             Task.Run( // Initiate the receiver thread
@@ -132,7 +137,7 @@ namespace Networking {
                             packet.ParseFailed += PacketParseFailed;
 
                         DataReceived?.Invoke( this, packet );
-                    } while ( _socket.Connected && !error );
+                    } while ( Connected && !error );
                 }
             );
         }
@@ -146,13 +151,11 @@ namespace Networking {
         }
 
         public Packet ReceiveOnce( int bufferSize = 4096 ) {
-            if ( Stream == null || !_socket.Connected )
+            if ( !Connected )
                 return null;
 
-            byte[] bytes = new byte[ bufferSize ];
-            int length = ( Stream?.Read( bytes, 0, bytes.Length ) ).Value;
-
-            return new Packet( new List<byte>( bytes ).GetRange( 0, length ) );
+            byte[] bytes = _socket.Receive( ref _serverEP );
+            return new Packet( bytes );
         }
 
         #endregion
@@ -166,5 +169,4 @@ namespace Networking {
         #endregion
 
     }
-
 }
