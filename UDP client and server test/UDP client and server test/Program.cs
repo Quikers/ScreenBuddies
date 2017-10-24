@@ -9,8 +9,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Networking;
-
 namespace UDP_client_and_server_test {
 
     public class ClientInfo {
