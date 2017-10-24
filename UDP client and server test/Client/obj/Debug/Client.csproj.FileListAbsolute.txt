@@ -1,0 +1,11 @@
+D:\github\ScreenBuddies\UDP client and server test\Client\bin\Debug\Client.exe.config
+D:\github\ScreenBuddies\UDP client and server test\Client\bin\Debug\Client.exe
+D:\github\ScreenBuddies\UDP client and server test\Client\bin\Debug\Client.pdb
+D:\github\ScreenBuddies\UDP client and server test\Client\bin\Debug\Networking.dll
+D:\github\ScreenBuddies\UDP client and server test\Client\bin\Debug\Networking.pdb
+D:\github\ScreenBuddies\UDP client and server test\Client\obj\Debug\Client.exe
+D:\github\ScreenBuddies\UDP client and server test\Client\obj\Debug\Client.pdb
+D:\github\ScreenBuddies\UDP client and server test\Client\obj\Debug\Client.csprojResolveAssemblyReference.cache
+D:\github\ScreenBuddies\bin\Client.exe.config
+D:\github\ScreenBuddies\bin\Client.exe
+D:\github\ScreenBuddies\bin\Client.pdb
