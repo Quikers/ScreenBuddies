@@ -1,59 +1,71 @@
 ﻿using System;
+using System.Diagnostics;
+using System.Net;
 using System.Threading.Tasks;
-
-using Networking;
+using UdpNetworking;
 
 namespace UDP_client_and_server_test {
 
     public class Program {
 
-        private static UdpSocket _client;
-        private static bool _applicationActive;
-
-        public static void Main( string[] args ) {
-            _client = new UdpSocket( "quikers.xyz", 8080 );
-            _applicationActive = true;
-
-            Console.WriteLine( "Connection setup, sending exploration ping..." );
-            Ping ping = new Ping();
-            _client.Send( ping );
-
-            // Handle received messages from the server
-            StartReceiving();
-
-            // Handle user input
-            HandleUserInput();
+        private static void DataReceived( UdpSocket s, Packet p, IPEndPoint endPoint ) {
+            if ( p.TypeName != "ping" && p.TypeName != "pong" )
+                Console.WriteLine( $"RECV \"{p.Content}\" FROM {endPoint}" );
+            else if ( p.TypeName == "ping" )
+                Console.WriteLine( $"RECV \"PING#{p.DeserializePacket<Ping>().ID}\" FROM {endPoint}" );
+            else
+                Console.WriteLine( $"RECV \"PONG#{p.DeserializePacket<Pong>().ID}\" FROM {endPoint} AFTER {Socket.Ping.MsSinceSent}ms" );
+        }
+        private static void DataSent( UdpSocket s, Packet p, IPEndPoint endPoint ) {
+            if ( p.TypeName != "ping" && p.TypeName != "pong" )
+                Console.WriteLine( $"SENT \"{p.Content}\" TO {endPoint}" );
+            else if ( p.TypeName == "ping" )
+                Console.WriteLine( $"SENT \"PING#{p.DeserializePacket<Ping>().ID}\" TO {endPoint}" );
+            else
+                Console.WriteLine( $"SENT \"PONG#{p.DeserializePacket<Pong>().ID}\" TO {endPoint} AFTER {Socket.Ping.MsSinceSent}ms" );
         }
 
-        private static void StartReceiving() {
+        public static UdpSocket Socket;
+
+        private static void Main( string[] args ) {
+            UdpSocket.OnDataReceived += DataReceived;
+            UdpSocket.OnDataSent += DataSent;
+            Socket = new UdpSocket();
+            Socket.Connect( "127.0.0.1", 8080 );
+            //Socket.Connect( "213.46.57.198", 8080 );
+
+            Socket.StartReceiving();
+
             Task.Run( () => {
-                while ( _client.Connected ) {
-                    if ( !_client.TryReceiveOnce( out Packet packet ) || packet == null )
-                        continue;
-
-                    // Strictly for debugging the received messages
-                    Console.WriteLine( $"RECV \"{packet.Content}\" FROM {_client.RemoteEndPoint}" );
-
-                    // If the message was not a PING, send a PONG back
-                    if ( packet.Content.ToString() != "PING" )
-                        _client.Send( "PONG" );
-                }
+                while ( true )
+                    Socket.StayAlive();
             } );
-        }
 
-        private static void HandleUserInput() {
-            while ( _applicationActive ) {
-                // Read a line from the console and store it in the text variable
-                string text = Console.ReadLine();
-                // If the input was non-existent or empty (space) ignore it
-                if ( string.IsNullOrWhiteSpace( text ) )
+            while ( true ) {
+                string input = Console.ReadLine();
+                if ( string.IsNullOrWhiteSpace( input ) )
                     continue;
 
-                // Send the message to the server
-                _client.Send( text );
-
-                // Strictly for debugging the sent messages
-                Console.WriteLine( $"SENT \"{text}\" TO {_client.RemoteEndPoint}" );
+                string[] split = input.Split( ' ' );
+                string first = split[ 0 ];
+                switch ( first.ToLower() ) {
+                    default:
+                        Socket.Send( input );
+                        break;
+                    case "/ns":
+                        Process.Start( "Server.exe" );
+                        continue;
+                    case "/nc":
+                        Process.Start( "Client.exe" );
+                        continue;
+                    case "/ping":
+                        Socket.SendPing();
+                        continue;
+                    case "/login":
+                        if ( split.Length > 1 && !string.IsNullOrWhiteSpace( split[ 1 ] ) )
+                            Socket.Send( new Login( split[1] ) );
+                        continue;
+                }
             }
         }
 

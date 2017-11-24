@@ -4,10 +4,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
-using Networking;
+using UdpNetworking;
 
 namespace Server {
 
@@ -38,58 +40,98 @@ namespace Server {
         private static bool ServerActive;
 
         private static void Main( string[] args ) {
-            _listener = new UdpServer( 8080, NewClientRequested, DataReceived );
-            SConsole.WriteLine( $"Server started on { _listener.LocalEndPoint }", ConsoleColor.DarkCyan );
-
+            // Initialize the server variables
+            _listener = new UdpServer( 8080 );
+            _listener.StartReceiving();
             ServerActive = true;
+
+            // Set the server's events
+            _listener.OnNewClientRequest += NewClientRequested;
+            _listener.OnClientDisconnected += ClientDisconnected;
+            _listener.OnDataReceived += DataReceived;
+            _listener.OnDataSent += DataSent;
+
+            // Set the Clients-list events
+            _listener.UserList.OnUsernameChanged += UsernameChanged;
+            _listener.UserList.OnUserListChanged += u => Broadcast( _listener.UserList );
+
+            SConsole.WriteLine( $"Server started on { _listener.LocalEndPoint }", ConsoleColor.Blue );
+
+            // Handle continuous user input for server commands
             HandleUserInput();
         }
 
-        private static void NewClientRequested( UdpSocket socket ) {
-            SConsole.WriteLine( $"A new client connected: {socket.RemoteEndPoint}", ConsoleColor.DarkCyan );
-            socket.DataSent += DataSent;
+        private static void ClientDisconnected( User user ) {
+            SConsole.WriteLine( $"{user} has disconnected", ConsoleColor.DarkRed );
         }
 
-        private static void DataReceived( UdpSocket socket, Packet packet ) {
-            SConsole.WriteLine( $"RECV \"{packet.Content}\" FROM {socket.RemoteEndPoint}", ConsoleColor.DarkMagenta );
+        private static void NewClientRequested( User user ) {
+            SConsole.WriteLine( $"{user} has connected", ConsoleColor.Blue );
+        }
+
+        private static void UsernameChanged( User user ) {
+            if ( user.Username != "UNKNOWN" )
+                SConsole.WriteLine( $"{user} has logged in", ConsoleColor.DarkGreen );
+
+            Broadcast( _listener.UserList );
+        }
+
+        private static void DataReceived( UdpSocket socket, Packet packet, IPEndPoint endPoint ) {
+            //if ( packet.Type.Name.ToLower() != "ping" && packet.Type.Name.ToLower() != "pong" )
+                SConsole.WriteLine( $"RECV \"{( packet.Type.Name.ToLower() == "ping" ? $"PING#{packet.DeserializePacket<Ping>().ID}" : $"{packet.Content}" )}\" FROM {endPoint}", ConsoleColor.DarkMagenta );
+
             HandlePacket( socket, packet );
         }
 
-        private static void DataSent( UdpSocket socket, Packet packet ) {
-            SConsole.WriteLine( $"SENT \"{packet.Content}\" TO {socket.RemoteEndPoint}", ConsoleColor.Blue );
-            HandlePacket( socket, packet );
+        private static void DataSent( UdpSocket socket, Packet packet, IPEndPoint endPoint ) {
+            //if ( packet.Type.Name.ToLower() != "ping" && packet.Type.Name.ToLower() != "pong" )
+                SConsole.WriteLine( $"SENT \"{( packet.Type.Name.ToLower() == "pong" ? $"PONG#{packet.DeserializePacket<Pong>().ID}" : $"{packet.Content}" )}\" TO {endPoint}", ConsoleColor.DarkCyan );
         }
 
         private static void HandlePacket( UdpSocket socket, Packet packet ) {
             switch ( packet.Type.Name.ToLower() ) {
                 default: SConsole.WriteLine( $"Received packet is of unrecognized type \"{packet.Type.Name}\". Packet is ignored.", ConsoleColor.DarkYellow ); break;
-                case "ping":
-                    if ( !packet.TryDeserializePacket( out Ping ping ) ) {
+                case "ping": case "pong": case "login": case "newid": case "disconnect": break;
+                case "get":
+                    if ( !packet.TryDeserializePacket( out GET getRequest ) ) {
                         SConsole.WriteLine( $"Unable to deserialize packet. Packet is possibly corrupted." );
                         break;
                     }
 
-                    ping.Received = true;
-                    socket.Send( ping );
+                    HandleGETRequests( socket, getRequest );
                     break;
             }
         }
 
+        private static void HandleGETRequests( UdpSocket socket, GET getRequest ) {
+            switch ( getRequest ) {
+                default: SConsole.WriteLine( $"Unknown GET request type \"{getRequest}\"" ); break;
+                case GET.UserList:
+                    socket.Send( _listener.UserList );
+                    break;
+            }
+        }
+
+        private static void Broadcast( object value ) => Broadcast( new Packet( value ) );
+        private static void Broadcast( Packet packet ) => _listener.UserList.ToList().ForEach( u => u.Socket.Send( packet ) );
+
         private static void HandleUserInput() {
             while ( ServerActive ) {
-                string input = Console.ReadLine()?.ToLower();
+                string input = Console.ReadLine();
                 if ( string.IsNullOrWhiteSpace( input ) )
                     continue;
 
                 if ( input[ 0 ] != '/' ) {
-                    _listener.Broadcast( input );
+                    Broadcast( input );
                     continue;
                 }
 
-                string cmd = input.Split( ' ' )[ 0 ];
-                string[] param = input.Split( ' ' );
+                List<string> split = new List<string>( input.Split( ' ' ) );
 
-                switch ( cmd ) {
+                string cmd = split[ 0 ];
+                string[] param = split.GetRange( 1, split.Count - 1 ).ToArray();
+
+                switch ( cmd.ToLower() ) {
                     default: SConsole.WriteLine( $"\"{cmd}\" is not a ScreenBuddies Server command.", ConsoleColor.Red ); break;
                     case "/newclient":
                     case "/nclient":
@@ -105,7 +147,7 @@ namespace Server {
                     case "/ul":
                     case "/online":
                         SConsole.WriteLine( "Currently connected users:\n", ConsoleColor.DarkCyan );
-                        _listener.Clients.ToList().ForEach( c => SConsole.WriteLine( c.RemoteEndPoint, ConsoleColor.Cyan ) );
+                        _listener.UserList.ToList().ForEach( c => SConsole.WriteLine( $"{c.Username} ({c.Socket.RemoteEndPoint})", ConsoleColor.Cyan ) );
                         SConsole.WriteLine();
                         break;
                     case "/tell":
@@ -113,9 +155,9 @@ namespace Server {
                     case "/whisper":
                     case "/talk":
                         if ( param.Length > 0 ) {
-                            List<UdpSocket> foundClients = _listener.Clients.Where( c => c.LocalEndPoint.ToString() == param[ 0 ] ).ToList();
+                            List<User> foundClients = _listener.UserList.Where( u => u.Socket.RemoteEndPoint.ToString().ToLower() == param[ 0 ].ToLower() ).ToList();
                             if ( foundClients.Count > 0 )
-                                foundClients.ForEach( c => c.Send( string.Join( " ", param, 1, param.Length - 2 ) ) );
+                                foundClients.ForEach( c => c.Socket.Send( param.Length > 2 ? string.Join( " ", param, 1, param.Length - 1 ) : param[ 1 ] ) );
                             else
                                 SConsole.WriteLine( $"Client \"{param[ 0 ]}\" is not connected to this server.", ConsoleColor.Red );
                         } else
@@ -125,7 +167,7 @@ namespace Server {
                     case "/exit":
                     case "/close":
                         SConsole.WriteLine( "Closing down server...", ConsoleColor.DarkYellow );
-                        _listener.Stop();
+                        _listener.StopReceiving();
                         Environment.Exit( 0 );
                         break;
                 }

@@ -5,8 +5,26 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ScreenBuddies"
         mc:Ignorable="d"
-        Title="ScreenBuddies" Height="400" Width="600">
-    <Grid>
-        
+        Title="ScreenBuddies" SizeToContent="Manual" Loaded="Window_Loaded" MinWidth="800" MinHeight="400" Width="800" Height="400" d:DesignWidth="800" d:DesignHeight="400" WindowStartupLocation="CenterScreen" Closing="Window_Closing">
+    <Grid x:Name="grdMain" Background="#101010" Margin="0,0,0,0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" >
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="1*"/>
+            <ColumnDefinition Width="200"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="30"/>
+            <RowDefinition Height="1*"/>
+        </Grid.RowDefinitions>
+
+        <Canvas Background="#1D1D1D" Margin="0,0,0,0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Grid.Row="1" Grid.ColumnSpan="2"></Canvas>
+
+        <ScrollViewer x:Name="svrConsole" Grid.Row="1" Margin="10,10,10,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" Grid.Column="0" >
+            <TextBlock x:Name="tblConsole" Background="#4F000000" Padding="10,10,10,10" FontFamily="Segoe UI Mono" FontSize="14" Foreground="WhiteSmoke" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="0,0,0,0" TextWrapping="Wrap"/>
+        </ScrollViewer>
+        <ListBox x:Name="lsbUsers" Background="#4F000000" Foreground="WhiteSmoke" BorderThickness="0" Margin="10,10,10,10" Grid.Row="1" Grid.Column="1"/>
+        <Button x:Name="btnClients" Content="Connected Users" Foreground="WhiteSmoke" Background="#333" Width="110" Margin="10,5,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Grid.Row="0" Click="btnClients_Click"/>
+        <Label x:Name="lblServerStatus" Content="" Foreground="WhiteSmoke" Margin="0,2,10,0" HorizontalAlignment="Right" HorizontalContentAlignment="Right" VerticalAlignment="Top" Grid.Row="0" Grid.Column="1"/>
+        <TextBox x:Name="tbxUsername" Text="Test1" FontFamily="Segoe UI" FontSize="13" Foreground="WhiteSmoke" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" HorizontalAlignment="Left" Margin="125,5,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Height="20" Width="147" KeyDown="tbxUsername_KeyDown"/>
+
     </Grid>
 </Window>
